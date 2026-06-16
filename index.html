@@ -99,7 +99,7 @@
     box-shadow:0 0 0 1px rgba(201,160,78,.15), 0 14px 40px rgba(0,0,0,.5);transition:transform .2s, box-shadow .2s}
   .relic:hover{transform:translateY(-4px);box-shadow:0 0 0 1px var(--gold),0 18px 50px rgba(201,160,78,.18)}
   .relic .plate{aspect-ratio:4/3;background:linear-gradient(135deg,#1a0d08,#2a1207);position:relative;overflow:hidden}
-  .relic .plate img{width:100%;height:100%;object-fit:cover;display:block}
+  .relic .plate img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
   .relic .crown{position:absolute;top:10px;right:12px;color:var(--gold);font-family:'Cinzel',serif;font-size:.62rem;
     letter-spacing:.18em;border:1px solid var(--gold-dim);padding:3px 8px;border-radius:2px;background:rgba(18,10,8,.7);z-index:2}
   .relic .cap{padding:16px 18px;border-top:1px solid var(--line)}
@@ -111,7 +111,7 @@
   .find{background:var(--char-3);border:1px solid var(--line);border-radius:3px;overflow:hidden;transition:transform .18s, box-shadow .18s}
   .find:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(255,106,26,.18);border-color:var(--oxblood)}
   .find .plate{aspect-ratio:1/1;background:linear-gradient(135deg,#180c07,#241007);overflow:hidden}
-  .find .plate img{width:100%;height:100%;object-fit:cover;display:block}
+  .find .plate img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
   .find .cap{padding:11px 13px;border-top:1px solid var(--line)}
   .find .cap .where{font-size:.92rem;color:var(--bone)}
   .find .cap .when{font-size:.78rem;color:var(--bone-dim);font-family:'Cinzel',serif;letter-spacing:.08em}
@@ -126,6 +126,18 @@
   @media(max-width:780px){.hall-grid{grid-template-columns:1fr 1fr}.pit-grid{grid-template-columns:1fr 1fr}}
   @media(max-width:480px){.hall-grid{grid-template-columns:1fr}}
   @media (prefers-reduced-motion: reduce){.sigil{animation:none}*{transition:none !important}}
+
+  /* LIGHTBOX */
+  #lightbox{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;
+    background:rgba(8,4,3,.93);padding:32px;cursor:zoom-out;backdrop-filter:blur(3px)}
+  #lightbox.open{display:flex}
+  #lightbox img{max-width:92vw;max-height:82vh;object-fit:contain;border:1px solid var(--gold-dim);
+    border-radius:3px;box-shadow:0 0 70px rgba(255,106,26,.3)}
+  #lbCap{position:absolute;bottom:22px;left:0;right:0;text-align:center;color:var(--bone);
+    font-family:'Cinzel',serif;letter-spacing:.06em;font-size:.9rem;padding:0 20px}
+  #lbClose{position:absolute;top:14px;right:26px;color:var(--bone);font-family:'Pirata One',cursive;
+    font-size:2.4rem;line-height:1;cursor:pointer;text-shadow:0 0 18px rgba(255,106,26,.5)}
+  #lbClose:hover{color:var(--ember)}
 </style>
 </head>
 <body>
@@ -216,7 +228,7 @@
    CONFIG — fill in your publishable key, then save & deploy
    ========================================================= */
 const SUPABASE_URL = "https://tbocnosacaxpyzhqjwsp.supabase.co";
-const SUPABASE_KEY = "sb_publishable__sYq2H3H_3-vLBRvkRhEXA_WLdmZq7J"; // sb_publishable_... (or legacy anon key)
+const SUPABASE_KEY = "PASTE_YOUR_PUBLISHABLE_KEY_HERE"; // sb_publishable_... (or legacy anon key)
 const BUCKET = "sightings";
 const MAX_BYTES = 8 * 1024 * 1024; // 8MB
 /* ========================================================= */
@@ -266,14 +278,14 @@ async function loadFinds(){
   const approved = data; // featured finds also appear in the general record
 
   hall.innerHTML = featured.length ? featured.map((f,i)=>`
-    <div class="relic">
+    <div class="relic" data-full="${publicUrl(f.image_path)}" data-loc="${esc(f.location)}" data-by="${esc(f.submitted_by)}">
       <div class="plate"><span class="crown">№ ${i+1}</span><img loading="lazy" src="${publicUrl(f.image_path)}" alt="Featured sighting at ${esc(f.location)}"></div>
       <div class="cap"><div class="where">${esc(f.location)||'Somewhere damned'}</div><div class="who">— ${esc(f.submitted_by)||'Anonymous'}</div></div>
     </div>`).join('')
     : '<div class="empty">Nothing has been raised to the hall yet. The Warden bides their time.</div>';
 
   pit.innerHTML = approved.length ? approved.map(f=>`
-    <div class="find">
+    <div class="find" data-full="${publicUrl(f.image_path)}" data-loc="${esc(f.location)}" data-by="${esc(f.submitted_by)}">
       <div class="plate"><img loading="lazy" src="${publicUrl(f.image_path)}" alt="Sighting at ${esc(f.location)}"></div>
       <div class="cap"><div class="where">${esc(f.location)||'Somewhere damned'}</div><div class="when">${timeAgo(f.created_at)}</div></div>
     </div>`).join('')
@@ -328,6 +340,36 @@ document.getElementById('again').addEventListener('click',()=>{
   clearError(); submitBtn.disabled=false; submitBtn.textContent='Offer it for judgment';
   verdict.style.display='none'; form.style.display='block';
 });
+</script>
+<div id="lightbox">
+  <span id="lbClose">&times;</span>
+  <img id="lbImg" alt="Full sighting">
+  <div id="lbCap"></div>
+</div>
+
+<script>
+(function(){
+  const lb=document.getElementById('lightbox'),
+        lbImg=document.getElementById('lbImg'),
+        lbCap=document.getElementById('lbCap');
+  function open(url,loc,by){
+    lbImg.src=url;
+    lbCap.textContent=(loc||'Somewhere damned')+'  —  '+(by||'Anonymous');
+    lb.classList.add('open');
+    document.body.style.overflow='hidden';
+  }
+  function close(){
+    lb.classList.remove('open'); lbImg.src=''; document.body.style.overflow='';
+  }
+  // any tile with data-full opens the full image
+  document.addEventListener('click',e=>{
+    const tile=e.target.closest('[data-full]');
+    if(tile) open(tile.dataset.full,tile.dataset.loc,tile.dataset.by);
+  });
+  // click anywhere on the overlay (image, backdrop, X) closes it
+  lb.addEventListener('click',close);
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
+})();
 </script>
 </body>
 </html>
